@@ -4,63 +4,501 @@
   padding: 0;
 }
 
+:root {
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+  color: #102019;
+  background: #eef3ef;
+}
+
 body {
-  font-family: Arial, Helvetica, sans-serif;
-  background: #f4f7f5;
-  color: #14201a;
+  min-width: 320px;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 80% 20%, rgba(132, 199, 162, 0.25), transparent 30%),
+    #eef3ef;
 }
 
 button {
   font: inherit;
 }
 
-.app {
+.app,
+.training-page {
   min-height: 100vh;
+}
+
+.navbar {
+  width: min(1180px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 28px 0;
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 24px;
+  justify-content: space-between;
+}
+
+.logo {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+
+.logo span {
+  opacity: 0.45;
+}
+
+.nav-status {
+  font-size: 13px;
+  opacity: 0.5;
 }
 
 .hero {
-  width: min(760px, 100%);
-  text-align: center;
+  width: min(1180px, calc(100% - 48px));
+  min-height: calc(100vh - 90px);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  align-items: center;
+  gap: 60px;
+  padding: 40px 0 80px;
 }
 
 .eyebrow {
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.18em;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  margin-bottom: 24px;
-  opacity: 0.55;
+  opacity: 0.45;
+  margin-bottom: 22px;
 }
 
-h1 {
-  font-size: clamp(48px, 8vw, 88px);
-  line-height: 0.95;
-  letter-spacing: -0.05em;
-  margin-bottom: 28px;
+.hero h1 {
+  font-size: clamp(70px, 10vw, 132px);
+  line-height: 0.83;
+  letter-spacing: -0.075em;
+  margin-bottom: 34px;
 }
 
 .description {
-  max-width: 560px;
-  margin: 0 auto 36px;
+  max-width: 540px;
   font-size: 18px;
-  line-height: 1.6;
-  opacity: 0.7;
+  line-height: 1.65;
+  opacity: 0.65;
+  margin-bottom: 34px;
 }
 
 .start-button {
-  border: none;
+  border: 0;
   border-radius: 999px;
-  padding: 16px 28px;
-  background: #14201a;
+  background: #13231b;
   color: white;
+  padding: 15px 23px;
   cursor: pointer;
-  transition: transform 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    opacity 0.2s ease;
 }
 
 .start-button:hover {
   transform: translateY(-2px);
+}
+
+.start-button.large {
+  display: inline-flex;
+  align-items: center;
+  gap: 22px;
+  padding: 17px 22px 17px 24px;
+}
+
+.start-button.large span {
+  font-size: 20px;
+}
+
+.stats {
+  display: flex;
+  gap: 34px;
+  margin-top: 55px;
+  flex-wrap: wrap;
+}
+
+.stats div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.stats strong {
+  font-size: 20px;
+}
+
+.stats span {
+  font-size: 12px;
+  opacity: 0.48;
+}
+
+.visual {
+  min-height: 570px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 38px;
+  background: #dce8df;
+}
+
+.movement-card {
+  width: min(310px, 75%);
+  aspect-ratio: 0.78;
+  border-radius: 28px;
+  background:
+    linear-gradient(150deg, rgba(255,255,255,0.92), rgba(225,238,228,0.82));
+  box-shadow: 0 30px 80px rgba(24, 53, 37, 0.16);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 2;
+  transform: rotate(-5deg);
+}
+
+.movement-card span {
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  opacity: 0.4;
+  margin-bottom: 16px;
+}
+
+.movement-card strong {
+  font-size: 56px;
+  letter-spacing: -0.06em;
+}
+
+.movement-card small {
+  margin-top: 12px;
+  opacity: 0.45;
+}
+
+.movement-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(2px);
+}
+
+.orb-one {
+  width: 250px;
+  height: 250px;
+  background: rgba(93, 173, 121, 0.42);
+  top: 80px;
+  right: 40px;
+}
+
+.orb-two {
+  width: 180px;
+  height: 180px;
+  background: rgba(59, 131, 87, 0.28);
+  bottom: 70px;
+  left: 50px;
+}
+
+.training-page {
+  padding: 24px;
+}
+
+.training-card {
+  width: min(1100px, 100%);
+  margin: 0 auto;
+  min-height: calc(100vh - 48px);
+  border-radius: 32px;
+  background: rgba(255, 255, 255, 0.72);
+  padding: 32px;
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.topbar h1 {
+  font-size: clamp(40px, 6vw, 72px);
+  letter-spacing: -0.06em;
+  line-height: 0.95;
+}
+
+.back-button {
+  border: 1px solid rgba(16, 32, 25, 0.1);
+  border-radius: 999px;
+  background: transparent;
+  padding: 11px 18px;
+  cursor: pointer;
+}
+
+.camera-placeholder {
+  min-height: 500px;
+  margin-top: 35px;
+  border-radius: 24px;
+  background: #17231d;
+  color: white;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 30px;
+}
+
+.camera-icon {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 25px;
+  margin-bottom: 24px;
+}
+
+.camera-placeholder h2 {
+  font-size: 34px;
+  margin-bottom: 10px;
+}
+
+.camera-placeholder p {
+  max-width: 450px;
+  line-height: 1.6;
+  opacity: 0.55;
+  margin-bottom: 25px;
+}
+
+@media (max-width: 800px) {
+  .hero {
+    grid-template-columns: 1fr;
+  }
+
+  .visual {
+    min-height: 420px;
+  }
+
+  .hero h1 {
+    font-size: clamp(64px, 18vw, 100px);
+  }
+
+  .navbar {
+    width: min(100% - 32px, 1180px);
+  }
+
+  .hero {
+    width: min(100% - 32px, 1180px);
+  }
+
+  .training-card {
+    padding: 22px;
+  }
+}
+
+.active-training {
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.challenge-layout {
+  display: grid;
+  grid-template-columns: 1.35fr 0.65fr;
+  gap: 22px;
+  margin-top: 32px;
+}
+
+.camera-panel {
+  position: relative;
+  min-height: 560px;
+  overflow: hidden;
+  border-radius: 26px;
+  background: #111915;
+}
+
+.camera-video,
+.pose-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.camera-video,
+.pose-canvas {
+  transform: scaleX(-1);
+}
+
+.pose-canvas {
+  pointer-events: none;
+}
+
+.camera-badge {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.42);
+  color: white;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  font-weight: 700;
+  backdrop-filter: blur(10px);
+}
+
+.live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #67f39b;
+}
+
+.camera-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 30px;
+  text-align: center;
+  color: white;
+  background: rgba(15, 24, 19, 0.82);
+  backdrop-filter: blur(8px);
+}
+
+.camera-overlay h2 {
+  font-size: 32px;
+  margin-bottom: 10px;
+}
+
+.camera-overlay p {
+  max-width: 440px;
+  line-height: 1.6;
+  opacity: 0.55;
+  margin-bottom: 24px;
+}
+
+.loader {
+  width: 44px;
+  height: 44px;
+  border: 3px solid rgba(255, 255, 255, 0.16);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-bottom: 24px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.challenge-panel {
+  min-height: 560px;
+  border-radius: 26px;
+  background: #eef4ef;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.challenge-panel h2 {
+  font-size: clamp(30px, 4vw, 46px);
+  line-height: 0.98;
+  letter-spacing: -0.05em;
+  margin-bottom: 20px;
+}
+
+.challenge-copy {
+  color: #102019;
+  opacity: 0.55;
+  line-height: 1.6;
+}
+
+.result-box {
+  margin-top: 28px;
+  padding: 20px;
+  border-radius: 20px;
+  background: white;
+  border: 1px solid rgba(16, 32, 25, 0.07);
+}
+
+.result-box.success {
+  background: #dff6e7;
+}
+
+.result-label,
+.score-row span {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  font-weight: 800;
+  opacity: 0.45;
+  margin-bottom: 8px;
+}
+
+.result-box strong {
+  display: block;
+  font-size: 22px;
+  margin-bottom: 6px;
+}
+
+.result-box p {
+  font-size: 13px;
+  line-height: 1.5;
+  opacity: 0.5;
+}
+
+.score-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.score-row > div {
+  border-radius: 18px;
+  background: white;
+  padding: 18px;
+}
+
+.score-row strong {
+  font-size: 30px;
+  letter-spacing: -0.05em;
+}
+
+.stop-button {
+  width: 100%;
+  margin-top: 14px;
+  border: 1px solid rgba(16, 32, 25, 0.12);
+  background: transparent;
+  color: #102019;
+  border-radius: 999px;
+  padding: 13px 18px;
+  cursor: pointer;
+}
+
+@media (max-width: 900px) {
+  .challenge-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .camera-panel,
+  .challenge-panel {
+    min-height: 480px;
+  }
 }
