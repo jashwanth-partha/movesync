@@ -7,20 +7,130 @@ const WASM_URL =
 const MODEL_URL =
   "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
 
+const CHALLENGES = [
+  {
+    title: "Raise your RIGHT hand",
+    short: "Right hand",
+    instruction: "Raise your right hand above your right shoulder.",
+    key: "right-hand",
+  },
+  {
+    title: "Raise your LEFT hand",
+    short: "Left hand",
+    instruction: "Raise your left hand above your left shoulder.",
+    key: "left-hand",
+  },
+  {
+    title: "Raise BOTH hands",
+    short: "Both hands",
+    instruction: "Raise both hands above your shoulders.",
+    key: "both-hands",
+  },
+  {
+    title: "Lift your RIGHT knee",
+    short: "Right knee",
+    instruction: "Lift your right knee upward while keeping your balance.",
+    key: "right-knee",
+  },
+  {
+    title: "Lift your LEFT knee",
+    short: "Left knee",
+    instruction: "Lift your left knee upward while keeping your balance.",
+    key: "left-knee",
+  },
+];
+
+const HOLD_MS = 900;
+
+function calculateScore(seconds) {
+  return Math.max(40, Math.round(100 - seconds * 4));
+}
+
 function App() {
   const [screen, setScreen] = useState("home");
   const [cameraState, setCameraState] = useState("idle");
   const [message, setMessage] = useState("Press Enable Camera to begin");
   const [movementDetected, setMovementDetected] = useState(false);
-  const [score, setScore] = useState(0);
   const [poseReady, setPoseReady] = useState(false);
+  const [challengeIndex, setChallengeIndex] = useState(0);
+  const [elapsed, setElapsed] = useState(0);
+  const [sessionResults, setSessionResults] = useState([]);
+
+  const [history, setHistory] = useState(() => {
+    try {
+      return JSON.parse(
+        localStorage.getItem("movesync-history") || "[]"
+      );
+    } catch {
+      return [];
+    }
+  });
 
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
   const poseRef = useRef(null);
   const animationRef = useRef(null);
-  const lastVideoTimeRef = useRef(-1);
+
+  const challengeIndexRef = useRef(0);
+  const challengeStartRef = useRef(0);
+  const holdStartRef = useRef(0);
+  const completingRef = useRef(false);
+  const movementDetectedRef = useRef(false);
+  const messageRef = useRef("");
+  const sessionResultsRef = useRef([]);
+
+  const challenge = CHALLENGES[challengeIndex];
+
+  const updateMessage = (value) => {
+    if (messageRef.current !== value) {
+      messageRef.current = value;
+      setMessage(value);
+    }
+  };
+
+  const stopCamera = () => {
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+      animationRef.current = null;
+    }
+
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+
+    if (poseRef.current) {
+      poseRef.current.close();
+      poseRef.current = null;
+    }
+
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+
+    setPoseReady(false);
+    setMovementDetected(false);
+    movementDetectedRef.current = false;
+    setCameraState("idle");
+    updateMessage("Press Enable Camera to begin");
+  };
+
+  useEffect(() => {
+    if (screen !== "training" || cameraState !== "ready") {
+      return undefined;
+    }
+
+    const timer = window.setInterval(() => {
+      if (challengeStartRef.current) {
+        setElapsed(
+          (performance.now() - challengeStartRef.current) / 1000
+        );
+      }
+    }, 100);
+
+    return () => window.clearInterval(timer);
+  }, [screen, cameraState, challengeIndex]);
 
   useEffect(() => {
     return () => {
@@ -29,7 +139,9 @@ function App() {
       }
 
       if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current
+          .getTracks()
+          .forEach((track) => track.stop());
       }
 
       if (poseRef.current) {
@@ -71,25 +183,199 @@ function App() {
       [16, 22],
     ];
 
-    ctx.strokeStyle = "rgba(116, 255, 159, 0.9)";
+    ctx.strokeStyle = movementDetectedRef.current
+      ? "rgba(126, 255, 161, 0.98)"
+      : "rgba(255, 255, 255, 0.84)";
+
     ctx.lineWidth = 3;
 
-    for (const [a, b] of connections) {
-      if (!points[a] || !points[b]) continue;
+    connections.forEach(([a, b]) => {
+      if (!points[a] || !points[b]) return;
 
       ctx.beginPath();
       ctx.moveTo(points[a].x, points[a].y);
       ctx.lineTo(points[b].x, points[b].y);
       ctx.stroke();
-    }
+    });
 
-    ctx.fillStyle = "#ffffff";
+    ctx.fillStyle = movementDetectedRef.current
+      ? "#7effa1"
+      : "#ffffff";
 
-    for (const point of points) {
+    points.forEach((point) => {
       ctx.beginPath();
       ctx.arc(point.x, point.y, 4, 0, Math.PI * 2);
       ctx.fill();
+    });
+  };
+
+  const evaluateMovement = (landmarks, key) => {
+    if (!landmarks) return false;
+
+    const rightShoulder = landmarks[12];
+    const leftShoulder = landmarks[11];
+
+    const rightWrist = landmarks[16];
+    const leftWrist = landmarks[15];
+
+    const rightHip = landmarks[24];
+    const leftHip = landmarks[23];
+
+    const rightKnee = landmarks[26];
+    const leftKnee = landmarks[25];
+
+    const visible = (...points) =>
+      points.every(
+        (point) => point && point.visibility > 0.45
+      );
+
+    if (key === "right-hand") {
+      return (
+        visible(rightShoulder, rightWrist) &&
+        rightWrist.y < rightShoulder.y - 0.08
+      );
     }
+
+    if (key === "left-hand") {
+      return (
+        visible(leftShoulder, leftWrist) &&
+        leftWrist.y < leftShoulder.y - 0.08
+      );
+    }
+
+    if (key === "both-hands") {
+      return (
+        visible(
+          leftShoulder,
+          rightShoulder,
+          leftWrist,
+          rightWrist
+        ) &&
+        leftWrist.y < leftShoulder.y - 0.05 &&
+        rightWrist.y < rightShoulder.y - 0.05
+      );
+    }
+
+    if (key === "right-knee") {
+      return (
+        visible(rightHip, rightKnee) &&
+        rightKnee.y < rightHip.y - 0.12
+      );
+    }
+
+    if (key === "left-knee") {
+      return (
+        visible(leftHip, leftKnee) &&
+        leftKnee.y < leftHip.y - 0.12
+      );
+    }
+
+    return false;
+  };
+
+  const finishSession = () => {
+    const completed = [...sessionResultsRef.current];
+
+    const totalScore = completed.length
+      ? Math.round(
+          completed.reduce(
+            (sum, result) => sum + result.score,
+            0
+          ) / completed.length
+        )
+      : 0;
+
+    const session = {
+      id: Date.now(),
+      date: new Date().toLocaleString(),
+      score: totalScore,
+      completed: completed.length,
+      total: CHALLENGES.length,
+      results: completed,
+    };
+
+    const previousHistory = (() => {
+      try {
+        return JSON.parse(
+          localStorage.getItem("movesync-history") || "[]"
+        );
+      } catch {
+        return [];
+      }
+    })();
+
+    const nextHistory = [session, ...previousHistory].slice(
+      0,
+      8
+    );
+
+    localStorage.setItem(
+      "movesync-history",
+      JSON.stringify(nextHistory)
+    );
+
+    setHistory(nextHistory);
+    stopCamera();
+    setScreen("results");
+  };
+
+  const completeChallenge = () => {
+    if (completingRef.current) return;
+
+    completingRef.current = true;
+
+    const current =
+      CHALLENGES[challengeIndexRef.current];
+
+    const seconds = Math.max(
+      0.1,
+      (performance.now() -
+        challengeStartRef.current) /
+        1000
+    );
+
+    const result = {
+      challenge: current.short,
+      time: Number(seconds.toFixed(1)),
+      score: calculateScore(seconds),
+    };
+
+    const nextResults = [
+      ...sessionResultsRef.current,
+      result,
+    ];
+
+    sessionResultsRef.current = nextResults;
+    setSessionResults(nextResults);
+
+    updateMessage("Nice! Challenge complete ✓");
+
+    window.setTimeout(() => {
+      const nextIndex =
+        challengeIndexRef.current + 1;
+
+      if (nextIndex >= CHALLENGES.length) {
+        completingRef.current = false;
+        finishSession();
+        return;
+      }
+
+      challengeIndexRef.current = nextIndex;
+      challengeStartRef.current = performance.now();
+
+      setChallengeIndex(nextIndex);
+      setElapsed(0);
+      setMovementDetected(false);
+
+      movementDetectedRef.current = false;
+      holdStartRef.current = 0;
+
+      updateMessage(
+        CHALLENGES[nextIndex].instruction
+      );
+
+      completingRef.current = false;
+    }, 900);
   };
 
   const processFrame = () => {
@@ -97,13 +383,30 @@ function App() {
     const canvas = canvasRef.current;
     const pose = poseRef.current;
 
-    if (!video || !canvas || !pose || video.readyState < 2) {
-      animationRef.current = requestAnimationFrame(processFrame);
+    if (
+      !video ||
+      !canvas ||
+      !pose ||
+      video.readyState < 2
+    ) {
+      animationRef.current =
+        requestAnimationFrame(processFrame);
       return;
     }
 
-    if (video.currentTime !== lastVideoTimeRef.current) {
-      const result = pose.detectForVideo(video, performance.now());
+    const currentTime = video.currentTime;
+
+    if (
+      currentTime !==
+      Number(video.dataset.movesyncTime || -1)
+    ) {
+      video.dataset.movesyncTime = String(currentTime);
+
+      const result = pose.detectForVideo(
+        video,
+        performance.now()
+      );
+
       const ctx = canvas.getContext("2d");
 
       canvas.width = video.videoWidth;
@@ -113,132 +416,299 @@ function App() {
 
       drawPose(landmarks, canvas, ctx);
 
-      if (landmarks) {
-        const rightShoulder = landmarks[12];
-        const rightWrist = landmarks[16];
-        const rightElbow = landmarks[14];
+      if (
+        landmarks &&
+        challengeStartRef.current &&
+        !completingRef.current
+      ) {
+        const currentChallenge =
+          CHALLENGES[
+            challengeIndexRef.current
+          ];
 
-        const visible =
-          rightShoulder?.visibility > 0.45 &&
-          rightWrist?.visibility > 0.45 &&
-          rightElbow?.visibility > 0.45;
+        const detected = evaluateMovement(
+          landmarks,
+          currentChallenge.key
+        );
 
-        if (visible) {
-          const raised = rightWrist.y < rightShoulder.y - 0.08;
+        if (
+          detected !==
+          movementDetectedRef.current
+        ) {
+          movementDetectedRef.current =
+            detected;
 
-          setMovementDetected(raised);
-
-          if (raised) {
-            setMessage("Great! Right hand detected ✓");
-            setScore(100);
-          } else {
-            setMessage("Raise your RIGHT hand above your shoulder");
-            setScore(0);
-          }
+          setMovementDetected(detected);
         }
-      } else {
-        setMovementDetected(false);
-        setMessage("Step into the camera frame");
-        setScore(0);
-      }
 
-      lastVideoTimeRef.current = video.currentTime;
+        if (detected) {
+          if (!holdStartRef.current) {
+            holdStartRef.current =
+              performance.now();
+          }
+
+          const heldFor =
+            performance.now() -
+            holdStartRef.current;
+
+          updateMessage("Hold it... ✓");
+
+          if (heldFor >= HOLD_MS) {
+            completeChallenge();
+          }
+        } else {
+          holdStartRef.current = 0;
+
+          updateMessage(
+            currentChallenge.instruction
+          );
+        }
+      } else if (!landmarks) {
+        movementDetectedRef.current = false;
+        setMovementDetected(false);
+        holdStartRef.current = 0;
+        updateMessage(
+          "Step into the camera frame"
+        );
+      }
     }
 
-    animationRef.current = requestAnimationFrame(processFrame);
+    animationRef.current =
+      requestAnimationFrame(processFrame);
   };
 
   const startCamera = async () => {
     try {
       setCameraState("loading");
-      setMessage("Loading camera and movement tracker...");
+      updateMessage(
+        "Loading camera and movement tracker..."
+      );
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: "user",
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        },
-        audio: false,
-      });
+      const stream =
+        await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: "user",
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
+        });
 
       streamRef.current = stream;
 
-      const vision = await FilesetResolver.forVisionTasks(WASM_URL);
+      const vision =
+        await FilesetResolver.forVisionTasks(
+          WASM_URL
+        );
 
-      const pose = await PoseLandmarker.createFromOptions(vision, {
-        baseOptions: {
-          modelAssetPath: MODEL_URL,
-          delegate: "CPU",
-        },
-        runningMode: "VIDEO",
-        numPoses: 1,
-        minPoseDetectionConfidence: 0.5,
-        minPosePresenceConfidence: 0.5,
-        minTrackingConfidence: 0.5,
-      });
+      const pose =
+        await PoseLandmarker.createFromOptions(
+          vision,
+          {
+            baseOptions: {
+              modelAssetPath: MODEL_URL,
+              delegate: "CPU",
+            },
+            runningMode: "VIDEO",
+            numPoses: 1,
+            minPoseDetectionConfidence: 0.5,
+            minPosePresenceConfidence: 0.5,
+            minTrackingConfidence: 0.5,
+          }
+        );
 
       poseRef.current = pose;
+
+      challengeIndexRef.current = 0;
+      sessionResultsRef.current = [];
+      challengeStartRef.current =
+        performance.now();
+
+      holdStartRef.current = 0;
+      completingRef.current = false;
+      movementDetectedRef.current = false;
+
+      setChallengeIndex(0);
+      setSessionResults([]);
+      setElapsed(0);
+      setMovementDetected(false);
       setPoseReady(true);
 
       const video = videoRef.current;
 
       video.srcObject = stream;
+
       await video.play();
 
       setCameraState("ready");
-      setMessage("Raise your RIGHT hand above your shoulder");
+      updateMessage(
+        CHALLENGES[0].instruction
+      );
 
-      animationRef.current = requestAnimationFrame(processFrame);
+      animationRef.current =
+        requestAnimationFrame(processFrame);
     } catch (error) {
       console.error(error);
 
       setCameraState("error");
 
-      if (error?.name === "NotAllowedError") {
-        setMessage(
+      if (
+        error?.name === "NotAllowedError"
+      ) {
+        updateMessage(
           "Camera permission was blocked. Allow camera access and try again."
         );
       } else {
-        setMessage(
+        updateMessage(
           "Could not start the camera. Check the browser permission and try again."
         );
       }
     }
   };
 
-  const stopCamera = () => {
-    if (animationRef.current) {
-      cancelAnimationFrame(animationRef.current);
-    }
+  const openTraining = () => {
+    challengeIndexRef.current = 0;
+    sessionResultsRef.current = [];
 
-    animationRef.current = null;
-
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    }
-
-    if (poseRef.current) {
-      poseRef.current.close();
-      poseRef.current = null;
-    }
-
-    setPoseReady(false);
-    setMovementDetected(false);
-    setScore(0);
-    setCameraState("idle");
-    setMessage("Press Enable Camera to begin");
-
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
-
-    if (canvasRef.current) {
-      const ctx = canvasRef.current.getContext("2d");
-      ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-    }
+    setChallengeIndex(0);
+    setSessionResults([]);
+    setScreen("training");
   };
+
+  if (screen === "results") {
+    const averageScore = sessionResults.length
+      ? Math.round(
+          sessionResults.reduce(
+            (sum, item) => sum + item.score,
+            0
+          ) / sessionResults.length
+        )
+      : 0;
+
+    const averageTime = sessionResults.length
+      ? (
+          sessionResults.reduce(
+            (sum, item) => sum + item.time,
+            0
+          ) / sessionResults.length
+        ).toFixed(1)
+      : "0.0";
+
+    return (
+      <main className="training-page results-page">
+        <div className="results-card">
+          <div className="results-header">
+            <div>
+              <p className="eyebrow">
+                Session complete
+              </p>
+
+              <h1>Great work.</h1>
+
+              <p className="results-subtitle">
+                Your movement session has been
+                recorded on this device.
+              </p>
+            </div>
+
+            <button
+              className="back-button"
+              onClick={() => setScreen("home")}
+            >
+              Home
+            </button>
+          </div>
+
+          <div className="score-hero">
+            <div>
+              <span>SESSION SCORE</span>
+
+              <strong>{averageScore}</strong>
+
+              <small>/ 100</small>
+            </div>
+
+            <div className="score-ring">
+              <b>{sessionResults.length}</b>
+              <span>
+                of {CHALLENGES.length}
+              </span>
+            </div>
+          </div>
+
+          <div className="result-grid">
+            <div className="metric-card">
+              <span>Average score</span>
+              <strong>
+                {averageScore}%
+              </strong>
+            </div>
+
+            <div className="metric-card">
+              <span>Average time</span>
+              <strong>{averageTime}s</strong>
+            </div>
+
+            <div className="metric-card">
+              <span>Completed</span>
+              <strong>
+                {sessionResults.length}
+              </strong>
+            </div>
+          </div>
+
+          <section className="challenge-results">
+            <div className="section-heading">
+              <span>
+                Challenge breakdown
+              </span>
+
+              <small>
+                Latest session
+              </small>
+            </div>
+
+            {sessionResults.map(
+              (result, index) => (
+                <div
+                  className="challenge-result-row"
+                  key={`${result.challenge}-${index}`}
+                >
+                  <div>
+                    <span>
+                      {String(index + 1).padStart(
+                        2,
+                        "0"
+                      )}
+                    </span>
+
+                    <strong>
+                      {result.challenge}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <small>
+                      {result.time}s
+                    </small>
+
+                    <b>{result.score}</b>
+                  </div>
+                </div>
+              )
+            )}
+          </section>
+
+          <button
+            className="start-button large"
+            onClick={openTraining}
+          >
+            Train Again <span>→</span>
+          </button>
+        </div>
+      </main>
+    );
+  }
 
   if (screen === "training") {
     return (
@@ -246,8 +716,11 @@ function App() {
         <div className="training-card active-training">
           <div className="topbar">
             <div>
-              <p className="eyebrow">MoveSync Training</p>
-              <h1>Raise your hand.</h1>
+              <p className="eyebrow">
+                MoveSync Training
+              </p>
+
+              <h1>{challenge.title}</h1>
             </div>
 
             <button
@@ -270,28 +743,45 @@ function App() {
                 playsInline
               />
 
-              <canvas ref={canvasRef} className="pose-canvas" />
+              <canvas
+                ref={canvasRef}
+                className="pose-canvas"
+              />
 
               <div className="camera-badge">
                 <span
-                  className={cameraState === "ready" ? "live-dot" : ""}
-                ></span>
+                  className={
+                    cameraState === "ready"
+                      ? "live-dot"
+                      : ""
+                  }
+                />
 
-                {cameraState === "ready" ? "LIVE" : "CAMERA"}
+                {cameraState === "ready"
+                  ? "LIVE"
+                  : "CAMERA"}
               </div>
 
               {cameraState === "idle" && (
                 <div className="camera-overlay">
-                  <div className="camera-icon">◉</div>
+                  <div className="camera-icon">
+                    ◉
+                  </div>
 
-                  <h2>Camera check</h2>
+                  <h2>
+                    Camera check
+                  </h2>
 
                   <p>
-                    Your camera stays on this device while MoveSync detects
-                    your pose.
+                    Your camera stays on this
+                    device while MoveSync
+                    detects your pose.
                   </p>
 
-                  <button className="start-button" onClick={startCamera}>
+                  <button
+                    className="start-button"
+                    onClick={startCamera}
+                  >
                     Enable Camera
                   </button>
                 </div>
@@ -301,7 +791,9 @@ function App() {
                 <div className="camera-overlay">
                   <div className="loader"></div>
 
-                  <h2>Preparing MoveSync</h2>
+                  <h2>
+                    Preparing MoveSync
+                  </h2>
 
                   <p>{message}</p>
                 </div>
@@ -309,13 +801,20 @@ function App() {
 
               {cameraState === "error" && (
                 <div className="camera-overlay">
-                  <div className="camera-icon">!</div>
+                  <div className="camera-icon">
+                    !
+                  </div>
 
-                  <h2>Camera unavailable</h2>
+                  <h2>
+                    Camera unavailable
+                  </h2>
 
                   <p>{message}</p>
 
-                  <button className="start-button" onClick={startCamera}>
+                  <button
+                    className="start-button"
+                    onClick={startCamera}
+                  >
                     Try Again
                   </button>
                 </div>
@@ -324,57 +823,107 @@ function App() {
 
             <aside className="challenge-panel">
               <div>
-                <p className="eyebrow">Challenge 01</p>
+                <div className="challenge-progress">
+                  <span>
+                    Challenge{" "}
+                    {String(
+                      challengeIndex + 1
+                    ).padStart(2, "0")}
+                  </span>
+
+                  <span>
+                    {CHALLENGES.length} total
+                  </span>
+                </div>
+
+                <div className="progress-bar">
+                  <div
+                    style={{
+                      width: `${
+                        ((challengeIndex + 1) /
+                          CHALLENGES.length) *
+                        100
+                      }%`,
+                    }}
+                  ></div>
+                </div>
 
                 <h2>
-                  Raise your RIGHT hand above your shoulder.
+                  {challenge.instruction}
                 </h2>
 
                 <p className="challenge-copy">
-                  Keep your body inside the camera frame. The skeleton overlay
-                  shows what MoveSync can detect.
+                  Hold the movement steady
+                  for a moment. The skeleton
+                  overlay shows what MoveSync
+                  can see.
                 </p>
               </div>
 
-              <div
-                className={`result-box ${
-                  movementDetected ? "success" : ""
-                }`}
-              >
-                <span className="result-label">STATUS</span>
+              <div>
+                <div
+                  className={`result-box ${
+                    movementDetected
+                      ? "success"
+                      : ""
+                  }`}
+                >
+                  <span className="result-label">
+                    STATUS
+                  </span>
 
-                <strong>
-                  {movementDetected
-                    ? "Movement detected"
-                    : "Keep going"}
-                </strong>
+                  <strong>
+                    {movementDetected
+                      ? "Movement detected"
+                      : "Keep going"}
+                  </strong>
 
-                <p>{message}</p>
-              </div>
-
-              <div className="score-row">
-                <div>
-                  <span>Score</span>
-                  <strong>{score}</strong>
+                  <p>{message}</p>
                 </div>
 
-                <div>
-                  <span>Tracker</span>
-                  <strong>{poseReady ? "ON" : "OFF"}</strong>
-                </div>
-              </div>
+                <div className="score-row">
+                  <div>
+                    <span>Time</span>
 
-              {cameraState === "ready" && (
-                <button className="stop-button" onClick={stopCamera}>
-                  Stop Camera
-                </button>
-              )}
+                    <strong>
+                      {elapsed.toFixed(1)}s
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span>Tracker</span>
+
+                    <strong>
+                      {poseReady
+                        ? "ON"
+                        : "OFF"}
+                    </strong>
+                  </div>
+                </div>
+
+                {cameraState === "ready" && (
+                  <button
+                    className="stop-button"
+                    onClick={stopCamera}
+                  >
+                    Stop Camera
+                  </button>
+                )}
+              </div>
             </aside>
           </div>
         </div>
       </main>
     );
   }
+
+  const bestScore = history.length
+    ? Math.max(
+        ...history.map(
+          (item) => item.score
+        )
+      )
+    : 0;
 
   return (
     <main className="app">
@@ -403,43 +952,63 @@ function App() {
           </h1>
 
           <p className="description">
-            MoveSync turns simple movement challenges into an interactive
-            training experience using your device camera.
+            MoveSync turns simple movement
+            challenges into an interactive
+            training experience using your
+            device camera.
           </p>
 
           <button
             className="start-button large"
-            onClick={() => setScreen("training")}
+            onClick={openTraining}
           >
             Start Training <span>→</span>
           </button>
 
           <div className="stats">
             <div>
-              <strong>01</strong>
-              <span>Movement Game</span>
+              <strong>
+                {CHALLENGES.length}
+              </strong>
+
+              <span>
+                Movement Challenges
+              </span>
             </div>
 
             <div>
-              <strong>02</strong>
-              <span>Real-time Tracking</span>
+              <strong>Live</strong>
+
+              <span>
+                Movement Tracking
+              </span>
             </div>
 
             <div>
-              <strong>03</strong>
-              <span>Performance Score</span>
+              <strong>
+                {bestScore || "—"}
+              </strong>
+
+              <span>
+                Best Session Score
+              </span>
             </div>
           </div>
         </div>
 
         <div className="visual">
           <div className="movement-orb orb-one"></div>
+
           <div className="movement-orb orb-two"></div>
 
           <div className="movement-card">
             <span>READY</span>
+
             <strong>MOVE</strong>
-            <small>Camera-based training</small>
+
+            <small>
+              Camera-based training
+            </small>
           </div>
         </div>
       </section>
